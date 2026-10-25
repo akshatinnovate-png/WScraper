@@ -64,6 +64,7 @@ Set these as environment variables. Sources without keys are skipped, and the ru
 | `BSKY_HANDLE` + `BSKY_APP_PASSWORD` | Bluesky posts | Bluesky → Settings → App passwords |
 | `MASTODON_INSTANCE` + `MASTODON_TOKEN` | Fediverse posts | your instance → Preferences → Development |
 | `GITHUB_TOKEN` | GitHub code search and higher rate limits | github.com/settings/tokens |
+| `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` | Reddit, when it blocks anonymous requests (it usually does) | reddit.com/prefs/apps → create a "script" app |
 
 ## Honest limits: what no tool can reach
 

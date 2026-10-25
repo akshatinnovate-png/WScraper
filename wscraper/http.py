@@ -125,6 +125,12 @@ class Fetcher:
         r.raise_for_status()
         return r.json()
 
+    async def post_form(self, url: str, data: dict, *, auth: tuple[str, str] | None = None,
+                        ua: str | None = None) -> dict:
+        r = await self._client.post(url, data=data, auth=auth, headers={"User-Agent": ua} if ua else None)
+        r.raise_for_status()
+        return r.json()
+
     async def text(self, url: str, **kw) -> str:
         r = await self.get(url, **kw)
         r.raise_for_status()

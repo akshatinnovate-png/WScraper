@@ -86,6 +86,10 @@ async def once(a: argparse.Namespace, store: Store) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     a = parse(argv)
+    # Windows consoles default to a legacy code page; don't crash printing non-Latin titles.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.WARNING, format="%(levelname)s %(message)s")
     if a.list_sources:
         list_sources()

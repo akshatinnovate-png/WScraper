@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from pathlib import Path
 
 import httpx
 
@@ -132,3 +133,21 @@ def test_store_reports_only_new_and_reports_write(tmp_path):
     assert data["query"] == "Akshat Sarkar" and len(data["mentions"]) == 2
     assert "Akshat Sarkar" in paths["html"].read_text()
     assert paths["csv"].read_text().count("\n") == 3
+
+
+def test_reports_write_on_non_utf8_locale(tmp_path):
+    """Windows defaults to cp1252; reports with non-Latin text must still save (regression)."""
+    import subprocess
+    import sys
+    script = f"""
+from pathlib import Path
+from wscraper.engine import RunResult
+from wscraper.models import Mention
+from wscraper.report import write_all
+m = Mention(url="https://e.com/a", title="\\u0985\\u0995\\u09cd\\u09b7\\u09a4 \\u2026 Akshat Sarkar \\u2713", source="bing")
+write_all(RunResult("Akshat Sarkar", [m]), Path({str(tmp_path)!r}), [m], set())
+"""
+    env = {"PATH": "", "PYTHONUTF8": "0", "LC_ALL": "C", "LANG": "C", "PYTHONPATH": str(Path(__file__).parents[1])}
+    r = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "অক্ষত" in (tmp_path / "akshat-sarkar.json").read_text(encoding="utf-8")

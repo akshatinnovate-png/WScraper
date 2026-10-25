@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import feedparser
 
+from ..http import BOT_UA
 from ..models import Mention
 from ..query import Query
 from .base import Source, register, strip_tags
@@ -23,7 +24,7 @@ class Wikipedia(Source):
             for page in range(self.pages):
                 data = await self.fetcher.json(f"https://{lang}.wikipedia.org/w/api.php", params={
                     "action": "query", "list": "search", "srsearch": f'"{q.raw}"', "srwhat": "text",
-                    "srlimit": "50", "sroffset": str(page * 50), "format": "json"})
+                    "srlimit": "50", "sroffset": str(page * 50), "format": "json"}, ua=BOT_UA)
                 rows = data.get("query", {}).get("search", [])
                 for r in rows:
                     title = r["title"]
@@ -33,7 +34,8 @@ class Wikipedia(Source):
                 if "continue" not in data:
                     break
         data = await self.fetcher.json("https://www.wikidata.org/w/api.php", params={
-            "action": "wbsearchentities", "search": q.raw, "language": "en", "limit": "50", "format": "json"})
+            "action": "wbsearchentities", "search": q.raw, "language": "en", "limit": "50", "format": "json"},
+            ua=BOT_UA)
         for e in data.get("search", []):
             out.append(self.hit(q, f"https://www.wikidata.org/wiki/{e['id']}", title=e.get("label", ""),
                                 body=f"{e.get('label', '')} {e.get('description', '')}", kind="reference"))

@@ -15,7 +15,7 @@ def search(name, routes):
     def handler(req: httpx.Request) -> httpx.Response:
         for (host, path), resp in routes.items():
             if req.url.host == host and req.url.path == path:
-                return resp() if callable(resp) else resp
+                return resp(req) if callable(resp) else resp
         return httpx.Response(404)
 
     async def go():
@@ -73,3 +73,34 @@ def test_hackernews_and_crossref():
                                 {"DOI": "10.1/y", "title": ["Other"], "author": [{"given": "A.", "family": "Sarkar"}]}]}}
     hits = search("crossref", {("api.crossref.org", "/works"): httpx.Response(200, json=cr)})
     assert [h.verified for h in hits] == [True, None]  # initials-only author is not claimed as a match
+
+
+def test_wikipedia_sends_identifying_user_agent():
+    seen = []
+
+    def handler(req):
+        seen.append(req.headers["user-agent"])
+        return httpx.Response(200, json={"query": {"search": []}, "search": []})
+
+    async def go():
+        async with Fetcher(transport=httpx.MockTransport(handler), min_interval=0, retries=0) as f:
+            await REGISTRY["wikipedia"](f, pages=1).search(Q)
+    asyncio.run(go())
+    assert seen and all(ua.startswith("WScraper/") for ua in seen)
+
+
+def test_reddit_uses_oauth_when_credentials_set(monkeypatch):
+    monkeypatch.setenv("REDDIT_CLIENT_ID", "cid")
+    monkeypatch.setenv("REDDIT_CLIENT_SECRET", "sec")
+    listing = {"data": {"after": None, "children": [
+        {"kind": "t3", "data": {"permalink": "/r/a/comments/1/x/", "title": "Akshat Sarkar", "created_utc": 1}}]}}
+
+    def search_route(req):
+        assert req.headers["authorization"] == "Bearer tok"
+        return httpx.Response(200, json=listing)
+
+    hits = search("reddit", {
+        ("www.reddit.com", "/api/v1/access_token"): httpx.Response(200, json={"access_token": "tok"}),
+        ("oauth.reddit.com", "/search"): search_route,
+    })
+    assert hits and hits[0].url == "https://www.reddit.com/r/a/comments/1/x/" and hits[0].verified

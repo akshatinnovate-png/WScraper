@@ -32,7 +32,7 @@ def write_all(result: RunResult, out_dir: Path, mentions: list[Mention], new_key
         "sources": [vars(s) for s in result.sources],
         "mentions": [dict(m.to_dict(), new=m.key in new_keys) for m in mentions],
     }
-    paths["json"].write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    paths["json"].write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     with paths["csv"].open("w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=CSV_FIELDS + ["new"])
         w.writeheader()

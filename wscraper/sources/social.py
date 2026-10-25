@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import httpx
 
+from ..http import BOT_UA
 from ..models import Mention
 from ..query import Query
 from .base import Source, register, strip_tags
@@ -19,9 +20,20 @@ def _ts(epoch: float | int | None) -> str:
 class Reddit(Source):
     name = "reddit"
     group = "social"
-    description = "Reddit posts (title + body) and comments via the public JSON endpoints"
+    description = "Reddit posts and comments (set REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET if it gets blocked)"
+
+    async def _endpoint(self) -> tuple[str, dict]:
+        """Reddit blocks most anonymous scripts; with a free app's credentials, use the official OAuth API."""
+        cid, secret = self.key("REDDIT_CLIENT_ID"), self.key("REDDIT_CLIENT_SECRET")
+        if not (cid and secret):
+            return "https://www.reddit.com/search.json", {}
+        token = await self.fetcher.post_form(
+            "https://www.reddit.com/api/v1/access_token", {"grant_type": "client_credentials"},
+            auth=(cid, secret), ua=BOT_UA)
+        return "https://oauth.reddit.com/search", {"Authorization": f"Bearer {token['access_token']}"}
 
     async def search(self, q: Query) -> list[Mention]:
+        url, auth = await self._endpoint()
         out: list[Mention] = []
         for phrase in q.search_phrases()[:3]:
             for kind in ("link", "comment"):
@@ -31,7 +43,7 @@ class Reddit(Source):
                               "include_over_18": "on", "raw_json": "1"}
                     if after:
                         params["after"] = after
-                    data = await self.fetcher.json("https://www.reddit.com/search.json", params=params)
+                    data = await self.fetcher.json(url, params=params, headers=auth, ua=BOT_UA)
                     children = data.get("data", {}).get("children", [])
                     for c in children:
                         d = c.get("data", {})
