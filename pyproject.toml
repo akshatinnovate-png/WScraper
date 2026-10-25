@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wscraper"
+version = "1.0.0"
+description = "Find every public mention of a name or topic across search engines, news, social platforms, code, academia and archives."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+    "lxml>=5",
+    "feedparser>=6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "respx>=0.21"]
+
+[project.scripts]
+wscraper = "wscraper.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["wscraper*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
