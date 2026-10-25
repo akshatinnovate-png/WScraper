@@ -64,3 +64,22 @@ def test_merge_keeps_richest_fields():
     b = Mention(url="https://e.com/p", title="longer title", snippet="snip", source="duckduckgo", kind="news")
     a.merge(b)
     assert a.title == "longer title" and a.kind == "news" and a.found_by == ["bing", "duckduckgo"]
+
+
+HINDI = Query("Akshat Sarkar", extra_aliases=["अक्षत सरकार", "অক্ষত সরকার"])
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("अक्षत सरकार ने कहा", True),
+    ("। अक्षत सरकार।", True),
+    ("অক্ষত সরকার বলেন", True),
+    ("अक्षय सरकार ने कहा", False),   # Akshay, not Akshat: vowel marks must not be stripped
+    ("अक्षत सरकारी", False),          # "sarkari" (government) is a different word
+    ("akshat sarkar", True),
+])
+def test_indic_spellings(text, expected):
+    assert HINDI.matches(text) is expected
+
+
+def test_indic_query_tokenizes_whole_words():
+    assert Query("अक्षत सरकार").tokens == ["अक्षत", "सरकार"]

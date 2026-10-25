@@ -104,3 +104,59 @@ def test_reddit_uses_oauth_when_credentials_set(monkeypatch):
         ("oauth.reddit.com", "/search"): search_route,
     })
     assert hits and hits[0].url == "https://www.reddit.com/r/a/comments/1/x/" and hits[0].verified
+
+
+def test_google_news_searches_each_year_and_aliases():
+    queries = []
+
+    def feed(req):
+        queries.append((req.url.params["q"], req.url.params["ceid"]))
+        return httpx.Response(200, text="<rss><channel></channel></rss>")
+
+    async def go():
+        q = Query("Akshat Sarkar", extra_aliases=["अक्षत सरकार"])
+        async with Fetcher(transport=httpx.MockTransport(feed), min_interval=0, retries=0) as f:
+            await REGISTRY["googlenews"](f, pages=1).search(q)
+    asyncio.run(go())
+    texts = {t for t, _ in queries}
+    assert '"Akshat Sarkar" after:2015-01-01 before:2016-01-01' in texts
+    assert '"अक्षत सरकार" after:2020-01-01 before:2021-01-01' in texts
+    assert ('"Sarkar, Akshat"', "IN:en") in queries
+
+
+def test_gdelt_keeps_years_that_worked(monkeypatch):
+    from wscraper.sources import news
+    monkeypatch.setattr(news.GDELT, "interval", 0)
+
+    def gdelt(req):
+        if req.url.params["startdatetime"].startswith("2019"):
+            return httpx.Response(200, text="Your search contained a phrase that is too common.")
+        if req.url.params["startdatetime"].startswith("2020"):
+            return httpx.Response(200, json={"articles": [{"url": "https://paper.in/a", "title": "Akshat Sarkar wins",
+                                                           "seendate": "20200105T101500Z", "domain": "paper.in"}]})
+        return httpx.Response(200, json={})
+    hits = search("gdelt", {("api.gdeltproject.org", "/api/v2/doc/doc"): gdelt})
+    assert [h.url for h in hits] == ["https://paper.in/a"] and hits[0].published == "2020-01-05T10:15:00Z"
+
+
+def test_platforms_fall_back_to_duckduckgo_and_hit_facebook_posts():
+    bing_queries = []
+
+    def bing(req):
+        bing_queries.append(req.url.params["q"])
+        if "facebook.com/groups" in req.url.params["q"]:
+            return httpx.Response(200, text='<li class="b_algo"><h2><a href="https://www.facebook.com/groups/1/posts/2">'
+                                            'Akshat Sarkar</a></h2><p>Congrats Akshat Sarkar</p></li>')
+        return httpx.Response(429)
+
+    ddg_page = ('<div class="result"><a class="result__a" href="https://www.instagram.com/p/xyz/">post</a>'
+                '<div class="result__snippet">Akshat Sarkar</div></div>')
+
+    def ddg(req):
+        return httpx.Response(200, text=ddg_page if "instagram.com" in req.url.params["q"] else "<html></html>")
+
+    hits = search("platforms", {("www.bing.com", "/search"): bing, ("html.duckduckgo.com", "/html/"): ddg})
+    urls = {h.key: h for h in hits}
+    assert urls["https://facebook.com/groups/1/posts/2"].kind == "post"
+    assert "https://instagram.com/p/xyz" in urls
+    assert any(q.endswith("site:facebook.com/permalink.php") for q in bing_queries)

@@ -29,7 +29,7 @@ Run `wscraper --list-sources` to see which are active.
 
 ## How it avoids misses *and* false hits
 
-- **Name variants.** It searches and matches `Akshat Sarkar`, `Sarkar, Akshat` (bylines, citations), `AkshatSarkar`, `akshat_sarkar`, `akshat-sarkar` and accented spellings. Add nicknames or handles with `-a "Akki Sarkar" -a "@akshat.codes"`.
+- **Name variants.** It searches and matches `Akshat Sarkar`, `Sarkar, Akshat` (bylines, citations), `AkshatSarkar`, `akshat_sarkar`, `akshat-sarkar` and accented spellings. Add nicknames, handles or other scripts with `-a`: `-a "अक्षत सरकार" -a "অক্ষত সরকার"`. Hindi and Bengali are matched exactly, so अक्षय (Akshay) or सरकारी (sarkari) don't count. Aliases are also searched on news and platform sites.
 - **Exact matching.** `Akshat Sarkaria` and `Akshat Kumar and Rahul Sarkar` do **not** count.
 - **Verification.** Search snippets are treated as leads only. Every page is opened, and a result is marked:
   - ✓ **Confirmed**: the name is on the live page, or in the post/comment text returned by the platform API.
@@ -42,6 +42,7 @@ Run `wscraper --list-sources` to see which are active.
 
 ```bash
 wscraper "Akshat Sarkar"                          # everything available
+wscraper "Akshat Sarkar" -a "अक्षत सरकार"          # also find Hindi mentions
 wscraper "Akshat Sarkar" -a "Akki Sarkar" -p 5    # extra alias, deeper result pages
 wscraper "Akshat Sarkar" -s googlenews,gdelt,bingnews   # only news
 wscraper "Akshat Sarkar" -x platforms,profiles    # skip some sources

@@ -7,10 +7,28 @@ import unicodedata
 from dataclasses import dataclass, field
 
 
+# Indic scripts (Devanagari through Malayalam) write vowels and conjuncts with combining marks, which
+# Python's \w does not count as letters. Treat them as part of the word, except the danda punctuation.
+_INDIC = "\u0900-\u0963\u0966-\u0DFF"
+_TOKEN = re.compile(rf"(?:[^\W_]|[{_INDIC}])+")
+_LETTER = rf"(?:[^\W_]|[{_INDIC}])"
+
+
 def _fold(text: str) -> str:
-    """Lowercase and strip accents so "Sárkar" matches "Sarkar"."""
-    text = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in text if not unicodedata.combining(c)).lower()
+    """Lowercase and strip Latin accents so "Sárkar" matches "Sarkar".
+
+    Only marks on Latin letters are dropped: in Hindi or Bengali the marks are the vowels themselves,
+    and stripping them would make अक्षत (Akshat) and अक्षय (Akshay) look alike.
+    """
+    out, base = [], ""
+    for c in unicodedata.normalize("NFKD", text):
+        if unicodedata.combining(c):
+            if base and ord(base) < 0x250:
+                continue
+        else:
+            base = c
+        out.append(c)
+    return "".join(out).lower()
 
 
 @dataclass
@@ -21,7 +39,7 @@ class Query:
 
     def __post_init__(self) -> None:
         self.raw = " ".join(self.raw.split())
-        self.tokens = re.findall(r"[^\W_]+", self.raw, flags=re.UNICODE)
+        self.tokens = _TOKEN.findall(self.raw)
         if not self.tokens:
             raise ValueError("query must contain at least one word")
         self._patterns = [self._pattern(self.tokens)]
@@ -29,7 +47,7 @@ class Query:
             # "Sarkar, Akshat" / "Sarkar Akshat" (surname-first: bylines, citations, forms).
             self._patterns.append(self._pattern([self.tokens[-1], *self.tokens[:-1]]))
         for alias in self.extra_aliases:
-            toks = re.findall(r"[^\W_]+", alias, flags=re.UNICODE)
+            toks = _TOKEN.findall(alias)
             if toks:
                 self._patterns.append(self._pattern(toks))
 
@@ -39,7 +57,7 @@ class Query:
         # so "akshat_sarkar", "AkshatSarkar", "akshat-sarkar" and "Sarkar, Akshat" all count.
         sep = r"[\s._\-,'’]{0,3}"
         body = sep.join(re.escape(_fold(t)) for t in tokens)
-        return re.compile(rf"(?<![^\W_]){body}(?![^\W_])", re.UNICODE)
+        return re.compile(rf"(?<!{_LETTER}){body}(?!{_LETTER})")
 
     @property
     def is_multiword(self) -> bool:

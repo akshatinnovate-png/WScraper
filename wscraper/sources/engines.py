@@ -24,6 +24,13 @@ PLATFORM_SITES = [
     "soundcloud.com", "spotify.com", "goodreads.com", "imdb.com", "telegram.me", "t.me",
     "discord.com", "tumblr.com", "vk.com", "producthunt.com", "stackoverflow.com",
 ]
+# Platforms worth several result pages per query rather than one.
+DEEP_SITES = {"facebook.com", "instagram.com", "linkedin.com", "x.com", "twitter.com", "threads.net", "youtube.com"}
+# Facebook URL shapes for individual posts, group posts, photos, videos and reels.
+FACEBOOK_PATHS = [
+    "facebook.com/*/posts", "facebook.com/groups", "facebook.com/permalink.php", "facebook.com/story.php",
+    "facebook.com/photo", "facebook.com/*/videos", "facebook.com/reel", "facebook.com/events",
+]
 DOCUMENT_TYPES = ["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx"]
 
 
@@ -139,21 +146,37 @@ class PlatformDorks(Source):
     description = "site: searches for LinkedIn, X, Instagram, Facebook, TikTok and ~35 other platforms, plus documents"
 
     async def search(self, q: Query) -> list[Mention]:
-        engine = DuckDuckGo(self.fetcher, pages=1)
+        # Bing first: DuckDuckGo throttles bursts of site: queries hard. DDG is the fallback.
+        engines = [Bing(self.fetcher, pages=1), DuckDuckGo(self.fetcher, pages=1)]
+        deep = [Bing(self.fetcher, pages=self.pages), DuckDuckGo(self.fetcher, pages=self.pages)]
+        names = [q.raw, *q.extra_aliases]  # includes Hindi/Bengali spellings passed with -a
+        jobs: list[tuple[str, list[_ScrapedEngine], str]] = []
+        for name in names:
+            for site in PLATFORM_SITES:
+                jobs.append((f'"{name}" site:{site}', deep if site in DEEP_SITES else engines, "web"))
+            for path in FACEBOOK_PATHS:
+                jobs.append((f'"{name}" site:{path}', deep, "post"))
+            # No site: filter catches mbasic./m./fb.watch links and pages that quote a post.
+            jobs.append((f'"{name}" facebook', engines, "web"))
+        jobs += [(f'"{q.raw}" filetype:{ext}', engines, "document") for ext in DOCUMENT_TYPES]
+
         out: list[Mention] = []
-        queries = [f'"{q.raw}" site:{site}' for site in PLATFORM_SITES]
-        queries += [f'"{q.raw}" filetype:{ext}' for ext in DOCUMENT_TYPES]
-        for query in queries:
-            try:
-                hits = await engine.run_query(q, query)
-            except Exception as exc:  # one blocked dork must not sink the rest
-                log.debug("dork %r failed: %s", query, exc)
+        for query, chain, kind in jobs:
+            for engine in chain:
+                try:
+                    hits = await engine.run_query(q, query)
+                except Exception as exc:  # one blocked query must not sink the rest
+                    log.debug("%s %r failed: %s", engine.name, query, exc)
+                    continue
+                if hits:
+                    break
+            else:
                 continue
             for h in hits:
                 h.found_by = [self.name]
                 h.source = self.name
-                if "filetype:" in query:
-                    h.kind = "document"
+                if kind != "web":
+                    h.kind = kind
             out += hits
         return out
 
